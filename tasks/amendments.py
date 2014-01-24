@@ -50,10 +50,13 @@ def run(options):
   if options.get('pages_only', False):
     return None
 
-  host = options.get('host', None)
+  host = options.get('host', None)  # Check for MongoDB host info
+  db = options.get('db', None)  # Check for MongoDB database info
 
-  if host:
+  if host and not db: # If host information was provided, initialize a MongoDB client, it will be recognized globally
     init_mongo(host)
+  elif host and db: # If database information was provided, use it
+    init_mongo(host, db=db)
 
   logging.warn("Going to fetch %i amendments from congress #%s" % (len(to_fetch), congress))
   saved_amendments = utils.process_set(to_fetch, fetch_amendment, options)

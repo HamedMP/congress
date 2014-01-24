@@ -5,7 +5,6 @@ class MongoUtils:
     """
     MongoUtils uses MongoClient from the pymongo library to store scraped congress data
     """
-
     def __init__(self, host="localhost", port=27017, db="congress"):
 
         # Construct a client to MongoDB
