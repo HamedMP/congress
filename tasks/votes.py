@@ -6,6 +6,7 @@ from lxml import html, etree
 import logging
 
 import vote_info
+from tasks import init_mongo
 
 def run(options):
   vote_id = options.get('vote_id', None)
@@ -46,6 +47,11 @@ def run(options):
 
   if options.get('pages_only', False):
     return None
+
+  host = options.get('host', None)
+
+  if host:
+    init_mongo(host)
 
   logging.warn("Going to fetch %i votes from congress #%s session %s" % (len(to_fetch), congress, session_year))
   

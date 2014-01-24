@@ -97,70 +97,77 @@ def fetch_amendment(amendment_id, options):
 def output_amendment(amdt, options):
   logging.info("[%s] Writing to disk..." % amdt['amendment_id'])
 
-  # output JSON - so easy!
-  utils.write(
-    json.dumps(amdt, sort_keys=True, indent=2, default=utils.format_datetime),
-    output_for_amdt(amdt['amendment_id'], "json")
-  )
+  try:
+      from tasks import MONGO_CACHE
 
-  # output XML
-  govtrack_type_codes = { 'hr': 'h', 's': 's', 'hres': 'hr', 'sres': 'sr', 'hjres': 'hj', 'sjres': 'sj', 'hconres': 'hc', 'sconres': 'sc' }
-  root = etree.Element("amendment")
-  root.set("session", amdt['congress'])
-  root.set("chamber", amdt['amendment_type'][0])
-  root.set("number", str(amdt['number']))
-  root.set("updated", utils.format_datetime(amdt['updated_at']))
+      if not MONGO_CACHE.amendment_exists(amdt["amendment_id"], "amendments"):
+        MONGO_CACHE.put(amdt, "amendments")
 
-  make_node = utils.make_node
+  except (AttributeError, ImportError):
+      # output JSON - so easy!
+      utils.write(
+        json.dumps(amdt, sort_keys=True, indent=2, default=utils.format_datetime),
+        output_for_amdt(amdt['amendment_id'], "json")
+      )
 
-  if amdt.get("amends_bill", None):
-    make_node(root, "amends", None,
-      type=govtrack_type_codes[amdt["amends_bill"]["bill_type"]],
-      number=str(amdt["amends_bill"]["number"]),
-      sequence=str(amdt["house_number"]) if amdt.get("house_number", None) else "")
-  elif amdt.get("amends_treaty", None):
-    make_node(root, "amends", None,
-      type="treaty",
-      number=str(amdt["amends_treaty"]["number"]))
+      # output XML
+      govtrack_type_codes = { 'hr': 'h', 's': 's', 'hres': 'hr', 'sres': 'sr', 'hjres': 'hj', 'sjres': 'sj', 'hconres': 'hc', 'sconres': 'sc' }
+      root = etree.Element("amendment")
+      root.set("session", amdt['congress'])
+      root.set("chamber", amdt['amendment_type'][0])
+      root.set("number", str(amdt['number']))
+      root.set("updated", utils.format_datetime(amdt['updated_at']))
 
-  make_node(root, "status", amdt['status'], datetime=amdt['status_at'])
+      make_node = utils.make_node
 
-  if amdt['sponsor'] and amdt['sponsor']['type'] == 'person':
-    v = amdt['sponsor']['thomas_id']
-    if not options.get("govtrack", False):
-      make_node(root, "sponsor", None, thomas_id=v)
-    else:
-      v = str(utils.get_govtrack_person_id('thomas', v))
-      make_node(root, "sponsor", None, id=v)
-  elif amdt['sponsor'] and amdt['sponsor']['type'] == 'committee':
-    make_node(root, "sponsor", None, committee=amdt['sponsor']['name'])
-  else:
-    make_node(root, "sponsor", None)
+      if amdt.get("amends_bill", None):
+        make_node(root, "amends", None,
+          type=govtrack_type_codes[amdt["amends_bill"]["bill_type"]],
+          number=str(amdt["amends_bill"]["number"]),
+          sequence=str(amdt["house_number"]) if amdt.get("house_number", None) else "")
+      elif amdt.get("amends_treaty", None):
+        make_node(root, "amends", None,
+          type="treaty",
+          number=str(amdt["amends_treaty"]["number"]))
 
-  make_node(root, "offered", None, datetime=amdt['introduced_at'])
+      make_node(root, "status", amdt['status'], datetime=amdt['status_at'])
 
-  make_node(root, "description", amdt["description"] if amdt["description"] else amdt["purpose"])
-  if amdt["description"]: make_node(root, "purpose", amdt["purpose"])
+      if amdt['sponsor'] and amdt['sponsor']['type'] == 'person':
+        v = amdt['sponsor']['thomas_id']
+        if not options.get("govtrack", False):
+          make_node(root, "sponsor", None, thomas_id=v)
+        else:
+          v = str(utils.get_govtrack_person_id('thomas', v))
+          make_node(root, "sponsor", None, id=v)
+      elif amdt['sponsor'] and amdt['sponsor']['type'] == 'committee':
+        make_node(root, "sponsor", None, committee=amdt['sponsor']['name'])
+      else:
+        make_node(root, "sponsor", None)
 
-  actions = make_node(root, "actions", None)
-  for action in amdt['actions']:
-      a = make_node(actions,
-        action['type'] if action['type'] in ("vote",) else "action",
-        None,
-        datetime=action['acted_at'])
-      if action['type'] == 'vote':
-        a.set("how", action["how"])
-        a.set("result", action["result"])
-        if action.get("roll") != None: a.set("roll", str(action["roll"]))
-      if action.get('text'): make_node(a, "text", action['text'])
-      if action.get('in_committee'): make_node(a, "committee", None, name=action['in_committee'])
-      for cr in action['references']:
-          make_node(a, "reference", None, ref=cr['reference'], label=cr['type'])
+      make_node(root, "offered", None, datetime=amdt['introduced_at'])
 
-  utils.write(
-    etree.tostring(root, pretty_print=True),
-    output_for_amdt(amdt['amendment_id'], "xml")
-  )
+      make_node(root, "description", amdt["description"] if amdt["description"] else amdt["purpose"])
+      if amdt["description"]: make_node(root, "purpose", amdt["purpose"])
+
+      actions = make_node(root, "actions", None)
+      for action in amdt['actions']:
+          a = make_node(actions,
+            action['type'] if action['type'] in ("vote",) else "action",
+            None,
+            datetime=action['acted_at'])
+          if action['type'] == 'vote':
+            a.set("how", action["how"])
+            a.set("result", action["result"])
+            if action.get("roll") != None: a.set("roll", str(action["roll"]))
+          if action.get('text'): make_node(a, "text", action['text'])
+          if action.get('in_committee'): make_node(a, "committee", None, name=action['in_committee'])
+          for cr in action['references']:
+              make_node(a, "reference", None, ref=cr['reference'], label=cr['type'])
+
+      utils.write(
+        etree.tostring(root, pretty_print=True),
+        output_for_amdt(amdt['amendment_id'], "xml")
+      )
 
 
 # assumes this is a House amendment, and it should choke if it doesn't find a number

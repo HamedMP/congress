@@ -65,92 +65,100 @@ def fetch_vote(vote_id, options):
 def output_vote(vote, options, id_type=None):
   logging.info("[%s] Writing to disk..." % vote['vote_id'])
   
-  # output JSON - so easy!
-  utils.write(
-    json.dumps(vote, sort_keys=True, indent=2, default=utils.format_datetime), 
-    output_for_vote(vote["vote_id"], "json"),
-  )
 
-  # What kind of IDs are we passed for Members of Congress?
-  # For current data, we infer from the chamber. For historical data from voteview,
-  # we're passed the type in id_type, which is set to "bioguide".
-  if not id_type: id_type = ("bioguide" if vote["chamber"] == "h" else "lis")
+  try:
+      from tasks import MONGO_CACHE
 
-  # output XML
-  root = etree.Element("roll")
-  
-  root.set("where", "house" if vote['chamber'] == "h" else "senate")
-  root.set("session", str(vote["congress"]))
-  root.set("year", str(vote["date"].year))
-  root.set("roll", str(vote["number"]))
-  root.set("source", "house.gov" if vote["chamber"] == "h" else "senate.gov")
-  
-  root.set("datetime", utils.format_datetime(vote['date']))
-  root.set("updated", utils.format_datetime(vote['updated_at']))
-  
-  def get_votes(option): return len(vote["votes"].get(option, []))
-  root.set("aye", str(get_votes("Yea") + get_votes("Aye")))
-  root.set("nay", str(get_votes("Nay") + get_votes("No")))
-  root.set("nv", str(get_votes("Not Voting")))
-  root.set("present", str(get_votes("Present")))
-  
-  utils.make_node(root, "category", vote["category"])
-  utils.make_node(root, "type", vote["type"])
-  utils.make_node(root, "question", vote["question"])
-  utils.make_node(root, "required", vote["requires"])
-  utils.make_node(root, "result", vote["result"])
-  
-  if "bill" in vote:
-    govtrack_type_codes = { 'hr': 'h', 's': 's', 'hres': 'hr', 'sres': 'sr', 'hjres': 'hj', 'sjres': 'sj', 'hconres': 'hc', 'sconres': 'sc' }
-    utils.make_node(root, "bill", None, session=str(vote["bill"]["congress"]), type=govtrack_type_codes[vote["bill"]["type"]], number=str(vote["bill"]["number"]))
-    
-  if "amendment" in vote:
-    n = utils.make_node(root, "amendment", None)
-    if vote["amendment"]["type"] == "s":
-      n.set("ref", "regular")
-      n.set("session", str(vote["congress"]))
-      n.set("number", "s" + str(vote["amendment"]["number"]))
-    elif vote["amendment"]["type"] == "h-bill":
-      n.set("ref", "bill-serial")
-      n.set("session", str(vote["congress"]))
-      n.set("number", str(vote["amendment"]["number"]))
-    
-  # well-known keys for certain vote types: +/-/P/0
-  option_keys = { "Aye": "+", "Yea": "+", "Nay": "-", "No": "-", "Present": "P", "Not Voting": "0" }
-  
-  # preferred order of output: ayes, nays, present, then not voting, and similarly for guilty/not-guilty
-  # and handling other options like people's names for votes for the Speaker.
-  option_sort_order = ('Aye', 'Yea', 'Guilty', 'No', 'Nay', 'Not Guilty', 'OTHER', 'Present', 'Not Voting')
-  options_list = sorted(vote["votes"].keys(), key = lambda o : option_sort_order.index(o) if o in option_sort_order else option_sort_order.index("OTHER") )
-  for option in options_list:
-    if option not in option_keys: option_keys[option] = option
-    utils.make_node(root, "option", option, key=option_keys[option])
-    
-  for option in options_list:
-    for v in vote["votes"][option]:
-      n = utils.make_node(root, "voter", None)
-      if v == "VP":
-        n.set("id", "0")
-        n.set("VP", "1")
-      elif not options.get("govtrack", False):
-        n.set("id", str(v["id"]))
-      else:
-        n.set("id", str(utils.get_govtrack_person_id(id_type, v["id"])))
-      n.set("vote", option_keys[option])
-      n.set("value", option)
-      if v != "VP":
-        n.set("state", v["state"])
-  
-  xmloutput = etree.tostring(root, pretty_print=True, encoding="utf8")
-  
-  # mimick two hard line breaks in GovTrack's legacy output to ease running diffs
-  xmloutput = re.sub('(source=".*?") ', r"\1\n  ", xmloutput)
-  xmloutput = re.sub('(updated=".*?") ', r"\1\n  ", xmloutput)
-  
-  utils.write(
-    xmloutput,
-    output_for_vote(vote['vote_id'], "xml")
-  )
+      if not MONGO_CACHE.vote_exists(vote["vote_id"], "votes"):
+        MONGO_CACHE.put(vote, "votes")
+
+  except (AttributeError, ImportError):
+      # output JSON - so easy!
+      utils.write(
+        json.dumps(vote, sort_keys=True, indent=2, default=utils.format_datetime),
+        output_for_vote(vote["vote_id"], "json"),
+      )
+
+      # What kind of IDs are we passed for Members of Congress?
+      # For current data, we infer from the chamber. For historical data from voteview,
+      # we're passed the type in id_type, which is set to "bioguide".
+      if not id_type: id_type = ("bioguide" if vote["chamber"] == "h" else "lis")
+
+      # output XML
+      root = etree.Element("roll")
+
+      root.set("where", "house" if vote['chamber'] == "h" else "senate")
+      root.set("session", str(vote["congress"]))
+      root.set("year", str(vote["date"].year))
+      root.set("roll", str(vote["number"]))
+      root.set("source", "house.gov" if vote["chamber"] == "h" else "senate.gov")
+
+      root.set("datetime", utils.format_datetime(vote['date']))
+      root.set("updated", utils.format_datetime(vote['updated_at']))
+
+      def get_votes(option): return len(vote["votes"].get(option, []))
+      root.set("aye", str(get_votes("Yea") + get_votes("Aye")))
+      root.set("nay", str(get_votes("Nay") + get_votes("No")))
+      root.set("nv", str(get_votes("Not Voting")))
+      root.set("present", str(get_votes("Present")))
+
+      utils.make_node(root, "category", vote["category"])
+      utils.make_node(root, "type", vote["type"])
+      utils.make_node(root, "question", vote["question"])
+      utils.make_node(root, "required", vote["requires"])
+      utils.make_node(root, "result", vote["result"])
+
+      if "bill" in vote:
+        govtrack_type_codes = { 'hr': 'h', 's': 's', 'hres': 'hr', 'sres': 'sr', 'hjres': 'hj', 'sjres': 'sj', 'hconres': 'hc', 'sconres': 'sc' }
+        utils.make_node(root, "bill", None, session=str(vote["bill"]["congress"]), type=govtrack_type_codes[vote["bill"]["type"]], number=str(vote["bill"]["number"]))
+
+      if "amendment" in vote:
+        n = utils.make_node(root, "amendment", None)
+        if vote["amendment"]["type"] == "s":
+          n.set("ref", "regular")
+          n.set("session", str(vote["congress"]))
+          n.set("number", "s" + str(vote["amendment"]["number"]))
+        elif vote["amendment"]["type"] == "h-bill":
+          n.set("ref", "bill-serial")
+          n.set("session", str(vote["congress"]))
+          n.set("number", str(vote["amendment"]["number"]))
+
+      # well-known keys for certain vote types: +/-/P/0
+      option_keys = { "Aye": "+", "Yea": "+", "Nay": "-", "No": "-", "Present": "P", "Not Voting": "0" }
+
+      # preferred order of output: ayes, nays, present, then not voting, and similarly for guilty/not-guilty
+      # and handling other options like people's names for votes for the Speaker.
+      option_sort_order = ('Aye', 'Yea', 'Guilty', 'No', 'Nay', 'Not Guilty', 'OTHER', 'Present', 'Not Voting')
+      options_list = sorted(vote["votes"].keys(), key = lambda o : option_sort_order.index(o) if o in option_sort_order else option_sort_order.index("OTHER") )
+      for option in options_list:
+        if option not in option_keys: option_keys[option] = option
+        utils.make_node(root, "option", option, key=option_keys[option])
+
+      for option in options_list:
+        for v in vote["votes"][option]:
+          n = utils.make_node(root, "voter", None)
+          if v == "VP":
+            n.set("id", "0")
+            n.set("VP", "1")
+          elif not options.get("govtrack", False):
+            n.set("id", str(v["id"]))
+          else:
+            n.set("id", str(utils.get_govtrack_person_id(id_type, v["id"])))
+          n.set("vote", option_keys[option])
+          n.set("value", option)
+          if v != "VP":
+            n.set("state", v["state"])
+
+      xmloutput = etree.tostring(root, pretty_print=True, encoding="utf8")
+
+      # mimick two hard line breaks in GovTrack's legacy output to ease running diffs
+      xmloutput = re.sub('(source=".*?") ', r"\1\n  ", xmloutput)
+      xmloutput = re.sub('(updated=".*?") ', r"\1\n  ", xmloutput)
+
+      utils.write(
+        xmloutput,
+        output_for_vote(vote['vote_id'], "xml")
+      )
 
 def output_for_vote(vote_id, format):
   vote_chamber, vote_number, vote_congress, vote_session_year = utils.split_vote_id(vote_id)

@@ -7,6 +7,8 @@ from bill_info import fetch_bill, output_for_bill
 
 from amendment_info import fetch_amendment
 
+from tasks import init_mongo
+
 
 def run(options):
   amendment_id = options.get('amendment_id', None)
@@ -47,6 +49,11 @@ def run(options):
 
   if options.get('pages_only', False):
     return None
+
+  host = options.get('host', None)
+
+  if host:
+    init_mongo(host)
 
   logging.warn("Going to fetch %i amendments from congress #%s" % (len(to_fetch), congress))
   saved_amendments = utils.process_set(to_fetch, fetch_amendment, options)

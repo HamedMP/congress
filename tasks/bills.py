@@ -5,6 +5,7 @@ from lxml import html, etree
 import logging
 
 import bill_info
+from tasks import init_mongo
 
 def run(options):
   bill_id = options.get('bill_id', None)
@@ -28,6 +29,11 @@ def run(options):
     limit = options.get('limit', None)
     if limit:
       to_fetch = to_fetch[:int(limit)]
+
+  host = options.get('host', None)
+
+  if host:
+    init_mongo(host)
 
   logging.warn("Going to fetch %i bills from congress #%s" % (len(to_fetch), congress))
 

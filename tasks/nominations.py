@@ -6,6 +6,8 @@ import logging
 
 import nomination_info
 
+from tasks import init_mongo
+
 def run(options):
   nomination_id = options.get('nomination_id', None)
 
@@ -25,6 +27,11 @@ def run(options):
     limit = options.get('limit', None)
     if limit:
       to_fetch = to_fetch[:int(limit)]
+
+  host = options.get('host', None)
+
+  if host:
+    init_mongo(host)
 
   logging.warn("Going to fetch %i nominations from congress #%s" % (len(to_fetch), congress))
 

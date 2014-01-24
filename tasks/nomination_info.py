@@ -212,8 +212,15 @@ def nomination_cache_for(nomination_id, file):
 def output_nomination(nomination, options):
   logging.info("[%s] Writing to disk..." % nomination['nomination_id'])
 
-  # output JSON - so easy!
-  utils.write(
-    json.dumps(nomination, sort_keys=True, indent=2, default=utils.format_datetime),
-    output_for_nomination(nomination['nomination_id'], "json")
-  )
+  try:
+      from tasks import MONGO_CACHE
+
+      if not MONGO_CACHE.nomination_exists(nomination["nomination_id"], "nominations"):
+        MONGO_CACHE.put(nomination, "nominations")
+
+  except Exception:
+      # output JSON - so easy!
+      utils.write(
+        json.dumps(nomination, sort_keys=True, indent=2, default=utils.format_datetime),
+        output_for_nomination(nomination['nomination_id'], "json")
+      )
